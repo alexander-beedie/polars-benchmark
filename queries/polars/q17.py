@@ -25,7 +25,7 @@ def q(
     q1 = (
         part.filter(pl.col("p_brand") == var1)
         .filter(pl.col("p_container") == var2)
-        .join(lineitem, how="left", left_on="p_partkey", right_on="l_partkey")
+        .join(lineitem, how="inner", left_on="p_partkey", right_on="l_partkey")
     )
 
     return (
