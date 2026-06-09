@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pyspark.sql import SparkSession
@@ -16,11 +20,56 @@ if TYPE_CHECKING:
 
 settings = Settings()
 
+# Spark 4.x runs on Java 17 or 21 (prefer higher version)
+SUPPORTED_JAVA_VERSIONS = (21, 17)
+
+
+def _ensure_java_home() -> None:
+    """Point JAVA_HOME at a Spark-compatible JDK (if not already set)."""
+    if os.environ.get("JAVA_HOME"):
+        return
+
+    # Note: if nothing suitable is found, Spark's own resolution still applies
+    if sys.platform == "darwin":
+        candidates = []
+        for version in SUPPORTED_JAVA_VERSIONS:
+            try:
+                home = subprocess.run(
+                    ["/usr/libexec/java_home", "-v", str(version)],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                ).stdout.strip()
+            except (OSError, subprocess.CalledProcessError):
+                home = ""
+            if home:
+                candidates.append(home)
+
+            candidates.append(f"/opt/homebrew/opt/openjdk@{version}")
+            candidates.append(f"/usr/local/opt/openjdk@{version}")
+
+        for home in candidates:
+            if (Path(home) / "bin" / "java").exists():
+                os.environ["JAVA_HOME"] = home
+                return
+
+    # TODO: automatically determine a suitable JAVA_HOME on other platforms
+    # if sys.platform == ...:
+    #     ...
+
 
 def get_or_create_spark() -> SparkSession:
+    _ensure_java_home()
+
     spark = (
         SparkSession.builder.appName("spark_queries")
         .master("local[*]")
+        # Bind the local driver to loopback. Without this, Spark resolves the
+        # machine hostname, which on many setups (e.g. behind a VPN) maps to a
+        # non-loopback address the block manager then cannot reach, causing
+        # "TaskResultLost" failures.
+        .config("spark.driver.bindAddress", "127.0.0.1")
+        .config("spark.driver.host", "127.0.0.1")
         .config("spark.driver.memory", settings.run.spark_driver_memory)
         .config("spark.executor.memory", settings.run.spark_executor_memory)
         .config("spark.log.level", settings.run.spark_log_level)
