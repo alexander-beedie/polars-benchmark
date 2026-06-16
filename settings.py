@@ -4,13 +4,14 @@ from typing import Literal, TypeAlias
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-IoType: TypeAlias = Literal["skip", "parquet", "feather", "csv", "duckdb"]
+IoType: TypeAlias = Literal["skip", "parquet", "feather", "csv", "duckdb", "network"]
 
 
 # Set via PATH_<NAME>
 class Paths(BaseSettings):
     answers: Path = Path("data/answers")
     tables: Path = Path("data/tables").absolute()
+    network_base_url: str = "s3://polars-pdsh-eu-central"
 
     timings: Path = Path("output/run")
     timings_filename: str = "timings.csv"
@@ -27,6 +28,7 @@ class Run(BaseSettings):
     io_type: IoType = "parquet"
 
     iterations: int = 1
+    pre_run: bool = True
     log_timings: bool = False
     show_results: bool = False
     check_results: bool = False  # Only available for SCALE_FACTOR=1
